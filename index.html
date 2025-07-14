@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Buzzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 30px;
+            text-align: center;
+        }
+
+        .setup-form {
+            margin-bottom: 30px;
+        }
+
+        .setup-form input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .setup-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8, #6a4190);
+        }
+
+        .team-display {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .team-display h2 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin: 0;
+        }
+
+        .team-display span {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .buzz-button {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 20px auto;
+            display: block;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .buzz-button.ready {
+            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+            color: white;
+            box-shadow: 0 10px 30px rgba(0,210,255,0.4);
+        }
+
+        .buzz-button.ready:hover {
+            background: linear-gradient(135deg, #00b8e6, #2d6bb8);
+            transform: scale(1.05);
+        }
+
+        .buzz-button.ready:active {
+            transform: scale(0.95);
+        }
+
+        .buzz-button.locked {
+            background: #bdc3c7;
+            color: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        .buzz-button.buzzed {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            cursor: not-allowed;
+        }
+
+        .buzz-order {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .buzz-order h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .buzz-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .buzz-item:last-child {
+            border-bottom: none;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .connection-status.connected {
+            background: #2ecc71;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .buzz-button {
+                width: 180px;
+                height: 180px;
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">Disconnected</div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>Buzzer Button</h1>
+            <div class="status" id="statusText">Enter your team name to start</div>
+        </div>
+        
+        <div class="main-content">
+            <!-- Setup Form -->
+            <div class="setup-form" id="setupForm">
+                <input type="text" id="teamNameInput" placeholder="Enter team name" maxlength="30">
+                <button class="btn btn-primary" onclick="connectToServer()">Join Game</button>
+            </div>
+            
+            <!-- Buzzer Interface -->
+            <div class="buzzer-interface hidden" id="buzzerInterface">
+                <div class="team-display">
+                    <h2>Team: <span id="teamDisplay"></span></h2>
+                </div>
+                
+                <button class="buzz-button locked" id="buzzButton" onclick="buzz()">
+                    <span id="buttonText">LOCKED</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let ws = null;
+        let isConnected = false;
+        let teamName = '';
+        let hasBuzzed = false;
+        let buzzersLocked = true;
+
+        // DOM elements
+        const setupForm = document.getElementById('setupForm');
+        const buzzerInterface = document.getElementById('buzzerInterface');
+        const teamNameInput = document.getElementById('teamNameInput');
+        const buzzButton = document.getElementById('buzzButton');
+        const buttonText = document.getElementById('buttonText');
+        const statusText = document.getElementById('statusText');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const teamDisplay = document.getElementById('teamDisplay');
+
+        // Connection functions
+        function connectToServer() {
+            const inputTeamName = teamNameInput.value.trim();
+            if (!inputTeamName) {
+                alert('Please enter a team name');
+                return;
+            }
+
+            teamName = inputTeamName;
+            statusText.textContent = 'Connecting to server...';
+            
+            // Change to your server's WebSocket URL
+            const wsUrl = 'ws://192.168.5.42:8765';
+            console.log('Attempting to connect to:', wsUrl);
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    console.log('Connected to server');
+                    isConnected = true;
+                    updateConnectionStatus();
+                    
+                    // Register as buzzer client
+                    ws.send(JSON.stringify({
+                        type: 'register',
+                        team_name: teamName
+                    }));
+                    
+                    // Show buzzer interface
+                    setupForm.classList.add('hidden');
+                    buzzerInterface.classList.remove('hidden');
+                    statusText.textContent = 'Connected and ready';
+                    teamDisplay.textContent = teamName;
+                };
+                
+                ws.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    handleServerMessage(data);
+                };
+                
+                ws.onclose = function() {
+                    console.log('Disconnected from server');
+                    isConnected = false;
+                    updateConnectionStatus();
+                    
+                    // Show setup form again
+                    setupForm.classList.remove('hidden');
+                    buzzerInterface.classList.add('hidden');
+                    statusText.textContent = 'Connection lost. Please reconnect.';
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                    statusText.textContent = 'Failed to connect to server';
+                    alert('Failed to connect to server at ' + wsUrl + '\n\nMake sure:\n1. The Python server is running\n2. You started it with: python server.py\n3. The server shows "Buzzer server started!"');
+                };
+                
+            } catch (error) {
+                console.error('Error creating WebSocket:', error);
+                alert('Failed to connect to server');
+            }
+        }
+
+        function handleServerMessage(data) {
+            if (data.type === 'state_update') {
+                buzzersLocked = data.buzzers_locked;
+                hasBuzzed = data.has_buzzed;
+                
+                updateBuzzButton();
+            } else if (data.type === 'buzz_rejected') {
+                if (data.reason === 'locked') {
+                    statusText.textContent = 'Buzzers are locked!';
+                } else if (data.reason === 'already_buzzed') {
+                    statusText.textContent = 'You already buzzed!';
+                }
+            }
+        }
+
+        function updateBuzzButton() {
+            buzzButton.className = 'buzz-button';
+            
+            if (hasBuzzed) {
+                buzzButton.classList.add('buzzed');
+                buttonText.textContent = 'BUZZED!';
+            } else if (buzzersLocked) {
+                buzzButton.classList.add('locked');
+                buttonText.textContent = 'LOCKED';
+            } else {
+                buzzButton.classList.add('ready');
+                buttonText.textContent = 'BUZZ!';
+            }
+        }
+
+        function updateConnectionStatus() {
+            if (isConnected) {
+                connectionStatus.textContent = 'Connected';
+                connectionStatus.className = 'connection-status connected';
+            } else {
+                connectionStatus.textContent = 'Disconnected';
+                connectionStatus.className = 'connection-status disconnected';
+            }
+        }
+
+        function buzz() {
+            if (!isConnected || !ws) {
+                alert('Not connected to server');
+                return;
+            }
+            
+            if (buzzersLocked) {
+                statusText.textContent = 'Buzzers are locked!';
+                return;
+            }
+            
+            if (hasBuzzed) {
+                statusText.textContent = 'You already buzzed!';
+                return;
+            }
+            
+            // Send buzz to server
+            ws.send(JSON.stringify({
+                type: 'buzz'
+            }));
+            
+            statusText.textContent = 'Buzzing...';
+        }
+
+        // Allow Enter key to submit team name
+        teamNameInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                connectToServer();
+            }
+        });
+
+        // Initialize
+        updateConnectionStatus();
+        
+        // Add a connection test button for debugging
+        console.log('Buzzer client loaded. Enter a team name and click "Join Game" to connect.');
+        console.log('Make sure the Python server is running on localhost:8765');
+    </script>
+</body>
+</html>
