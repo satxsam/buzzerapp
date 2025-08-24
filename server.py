@@ -8,8 +8,13 @@ import asyncio
 import json
 import websockets
 import logging
+import socket
+import re
+import os
+import threading
 from datetime import datetime
 from typing import Dict, Set
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +40,20 @@ class BuzzerServer:
             logger.info("Admin client connected")
         else:
             team_name = data.get('team_name', f'Team {len([c for c in self.clients.values() if c.get("type") == "buzzer"]) + 1}')
+            
+            # Check if team name is already taken
+            existing_teams = [c['team_name'] for c in self.clients.values() if c.get('type') == 'buzzer']
+            logger.info(f"Checking team name '{team_name}' against existing teams: {existing_teams}")
+            
+            if team_name in existing_teams:
+                await websocket.send(json.dumps({
+                    'type': 'registration_rejected',
+                    'reason': 'duplicate_name',
+                    'message': f'Team name "{team_name}" is already taken. Please choose a different name.'
+                }))
+                logger.info(f"Registration rejected for duplicate team name: {team_name}")
+                return
+            
             self.clients[websocket] = {
                 'type': 'buzzer',
                 'team_name': team_name,
@@ -92,8 +111,8 @@ class BuzzerServer:
             logger.info("Buzzers reset")
         elif command == 'lock':
             self.buzzers_locked = True
-            await self.broadcast_state_update()
-            logger.info("Buzzers locked")
+            await self.reset_buzzers()
+            logger.info("Buzzers locked and reset")
         elif command == 'unlock':
             self.buzzers_locked = False
             await self.broadcast_state_update()
@@ -210,6 +229,68 @@ class BuzzerServer:
         finally:
             await self.handle_client_disconnect(websocket)
 
+    def get_local_ip(self):
+        """Get the local IP address"""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "localhost"
+
+    def update_html_files(self, ip_address):
+        """Update HTML files with the correct IP address"""
+        files_to_update = ['index.html', 'admin.html']
+        
+        for filename in files_to_update:
+            if not os.path.exists(filename):
+                logger.warning(f"{filename} not found")
+                continue
+                
+            # Read the file
+            with open(filename, 'r') as f:
+                content = f.read()
+            
+            # Replace localhost with IP address
+            updated_content = re.sub(
+                r"const wsUrl = 'ws://localhost:8765';",
+                f"const wsUrl = 'ws://{ip_address}:8765';",
+                content
+            )
+            
+            # Also handle any existing IP addresses
+            updated_content = re.sub(
+                r"const wsUrl = 'ws://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:8765';",
+                f"const wsUrl = 'ws://{ip_address}:8765';",
+                updated_content
+            )
+            
+            # Write back to file
+            with open(filename, 'w') as f:
+                f.write(updated_content)
+            
+            logger.info(f"✓ Updated {filename} with IP {ip_address}")
+
+    def start_http_server(self, ip_address):
+        """Start HTTP server to serve HTML files"""
+        class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
+            def log_message(self, format, *args):
+                # Suppress HTTP server logs to keep output clean
+                pass
+        
+        def run_http_server():
+            try:
+                httpd = HTTPServer(('0.0.0.0', 8080), CustomHTTPRequestHandler)
+                logger.info(f"HTTP server started on http://{ip_address}:8080")
+                httpd.serve_forever()
+            except Exception as e:
+                logger.error(f"HTTP server failed: {e}")
+        
+        http_thread = threading.Thread(target=run_http_server, daemon=True)
+        http_thread.start()
+
 # Remove the global server instance since we create it in main()
 # buzzer_server = BuzzerServer()
 
@@ -219,6 +300,13 @@ async def main():
     
     # Create server instance
     server = BuzzerServer()
+    
+    # Get IP and update HTML files
+    ip_address = server.get_local_ip()
+    server.update_html_files(ip_address)
+    
+    # Start HTTP server for serving HTML files
+    server.start_http_server(ip_address)
     
     # Create wrapper function for the handler
     async def handler(websocket):
@@ -233,7 +321,9 @@ async def main():
     )
     
     await start_server
-    logger.info("Buzzer server started! Connect clients to ws://localhost:8765")
+    logger.info(f"WebSocket server started on ws://{ip_address}:8765")
+    logger.info(f"Teams: http://{ip_address}:8080/index.html")
+    logger.info(f"Admin: http://{ip_address}:8080/admin.html")
     
     # Keep server running
     await asyncio.Future()  # run forever
